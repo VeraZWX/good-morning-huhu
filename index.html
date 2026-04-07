@@ -7,6 +7,9 @@
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Noto+Serif+SC:wght@400;600;700&family=Ma+Shan+Zheng&family=ZCOOL+XiaoWei&display=swap" rel="stylesheet">
+    <!-- Firebase SDK -->
+    <script src="https://www.gstatic.com/firebasejs/10.8.0/firebase-app-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/10.8.0/firebase-database-compat.js"></script>
     <style>
         :root {
             --warm-cream: #FDF6E3;
@@ -623,6 +626,21 @@
     </div>
 
     <script>
+        // Firebase 配置
+        const firebaseConfig = {
+            apiKey: "AIzaSyB6eBPpoU8_VSbON1CnNTAVnI6W9T7wuuk",
+            authDomain: "menu-webapp-76d72.firebaseapp.com",
+            projectId: "menu-webapp-76d72",
+            storageBucket: "menu-webapp-76d72.firebasestorage.app",
+            messagingSenderId: "1074481402937",
+            appId: "1:1074481402937:web:3bf13b63f1ca311689a9e8",
+            measurementId: "G-7HEBDEBPNR"
+        };
+
+        // 初始化 Firebase
+        firebase.initializeApp(firebaseConfig);
+        const database = firebase.database();
+
         // 默认数据
         const defaultData = {
             categories: [
@@ -649,49 +667,40 @@
         let editingDishId = null;
         let nextDishId = 9;
 
-        // 从 localStorage 加载数据
+        // 从 Firebase 加载数据
         function loadData() {
-            const saved = localStorage.getItem('menuAppData');
-            if (saved) {
-                try {
-                    const data = JSON.parse(saved);
-                    menuData = {
-                        categories: data.categories || defaultData.categories,
-                        dishes: data.dishes || defaultData.dishes
-                    };
-                    nextDishId = data.nextDishId || defaultData.nextDishId;
-                    return true;
-                } catch (e) {
-                    console.error('加载数据失败:', e);
-                }
-            }
-            return false;
+            return new Promise((resolve) => {
+                database.ref('menuData').once('value', (snapshot) => {
+                    const data = snapshot.val();
+                    if (data) {
+                        menuData = {
+                            categories: data.categories || defaultData.categories,
+                            dishes: data.dishes || defaultData.dishes
+                        };
+                        nextDishId = data.nextDishId || defaultData.nextDishId;
+                        resolve(true);
+                    } else {
+                        resolve(false);
+                    }
+                }, (error) => {
+                    console.error('加载失败:', error);
+                    resolve(false);
+                });
+            });
         }
 
-        // 保存数据到 localStorage
+        // 保存数据到 Firebase
         function saveData() {
-            const data = {
+            database.ref('menuData').set({
                 categories: menuData.categories,
                 dishes: menuData.dishes,
                 nextDishId: nextDishId
-            };
-            localStorage.setItem('menuAppData', JSON.stringify(data));
-        }
-
-        // 重置为默认数据
-        function resetData() {
-            if (confirm('确定要重置为默认数据吗？所有修改将丢失！')) {
-                localStorage.removeItem('menuAppData');
-                menuData = {
-                    categories: JSON.parse(JSON.stringify(defaultData.categories)),
-                    dishes: JSON.parse(JSON.stringify(defaultData.dishes))
-                };
-                nextDishId = defaultData.nextDishId;
-                renderNavLinks();
-                renderMainContent();
-                updateCategorySelect();
-                alert('已重置为默认数据');
-            }
+            }).then(() => {
+                console.log('保存成功');
+            }).catch((error) => {
+                console.error('保存失败:', error);
+                alert('保存失败，请检查网络连接');
+            });
         }
 
         // 删除菜品
@@ -704,17 +713,24 @@
         }
 
         function init() {
-            // 尝试加载已保存的数据，如果没有则使用默认数据
-            if (!loadData()) {
-                menuData = {
-                    categories: JSON.parse(JSON.stringify(defaultData.categories)),
-                    dishes: JSON.parse(JSON.stringify(defaultData.dishes))
-                };
-                nextDishId = defaultData.nextDishId;
-            }
-            renderNavLinks();
-            renderMainContent();
-            updateCategorySelect();
+            // 显示加载提示
+            document.getElementById('mainContent').innerHTML = '<div style="text-align:center;padding:100px;font-size:1.2rem;color:var(--text-light);">正在加载数据...</div>';
+            
+            // 从 Firebase 加载数据
+            loadData().then((loaded) => {
+                if (!loaded) {
+                    // 如果没有数据，使用默认数据
+                    menuData = {
+                        categories: JSON.parse(JSON.stringify(defaultData.categories)),
+                        dishes: JSON.parse(JSON.stringify(defaultData.dishes))
+                    };
+                    nextDishId = defaultData.nextDishId;
+                    saveData(); // 保存默认数据到 Firebase
+                }
+                renderNavLinks();
+                renderMainContent();
+                updateCategorySelect();
+            });
         }
 
         function renderNavLinks() {
